@@ -1,10 +1,9 @@
 // Packages
 const fs = require("nano-fs");
 const path = require("path");
-const { app, BrowserWindow, ipcMain } = require("electron");
-// const autoUpdater = require("electron-updater").autoUpdater;
+const { app, session, ipcMain } = require("electron");
 const prepareNext = require("electron-next");
-const { download } = require("electron-dl");
+const { download } = require("./utils/download");
 
 const buildMenu = require("./menu");
 
@@ -18,70 +17,39 @@ let willQuitApp = false;
 const downloadSubtitles = async (event, args, mainWindow) => {
   const files = args.files;
 
-  try {
-    return await Promise.all(
-      files.map(async ({ file, subtitle }) => {
-        const downloadLocation = path.dirname(file.path);
-        const originalFileName = file.name;
-        const subtitleFilename = originalFileName.replace(/\.[^/.]+$/, "");
+  const downloadReference = files.map(async ({ file, subtitle }) => {
+    const downloadLocation = path.dirname(file.path);
+    const originalFileName = file.name;
+    const subtitleFilename = originalFileName.replace(/\.[^/.]+$/, "");
 
-        const options = {
-          saveAs: false,
-          directory: downloadLocation
-        };
+    mainWindow.webContents.session.on(
+      "will-download",
+      (event, item, webContents) => {
+        item.setSavePath(downloadLocation);
 
-        try {
-          const item = await download(mainWindow, subtitle.url, options);
-
-          console.log(item);
-
-          // const rename = await fs.rename(
-          //   `${downloadLocation}/${subtitle.filename}`,
-          //   `${downloadLocation}/${subtitleFilename}.srt`
-          // );
-
-          return rename;
-        } catch (error) {
-          console.log(error);
-        }
-      })
+        item.once("done", (event, state) => {
+          if (state === "completed") {
+            console.log("Download successfully");
+            return item;
+          } else {
+            console.log(`Download failed: ${state}`);
+          }
+        });
+      }
     );
+
+    mainWindow.webContents.downloadURL(subtitle.url);
+  });
+
+  try {
+    console.log("promise? ", downloadReference);
+
+    const items = await Promise.all(downloadReference);
+
+    console.log("items: ", items);
   } catch (error) {
     console.log(error);
   }
-
-  // await Promise.all(files.map())
-
-  // args.files.map(async ({ dialog, subtitle, file }) => {
-  //   if (dialog) {
-  //     const options = {
-  //       saveAs: true,
-  //       openFolderWhenDone: true
-  //     };
-  //     const dl = await download(mainWindow, subtitle.url, options);
-  //   } else {
-  //     // Download file and put in dropped file folder
-  //     const downloadLocation = path.dirname(file.path);
-  //     const originalFileName = file.name;
-  //     const filename = originalFileName.replace(/\.[^/.]+$/, ""); // remove extension
-
-  //     const options = {
-  //       saveAs: false,
-  //       directory: downloadLocation
-  //     };
-
-  //     const dl = await download(mainWindow, subtitle.url, options);
-  //     dl.setSavePath(downloadLocation);
-
-  //     await fs.rename(
-  //       `${downloadLocation}/${subtitle.filename}`,
-  //       `${downloadLocation}/${filename}.srt`,
-  //       error => {
-  //         if (error) console.log(error);
-  //       }
-  //     );
-  //   }
-  // });
 };
 
 const showAboutWindow = () => {
